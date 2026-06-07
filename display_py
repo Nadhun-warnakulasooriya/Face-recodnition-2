@@ -1,0 +1,143 @@
+import cv2
+from deepface import DeepFace
+import pickle
+import os
+import numpy as np
+
+DB_FILE = "deepface_database.pkl"
+TOLERANCE = 0.30  # Strict Cosine Distance threshold for Facenet512
+CONFIDENCE_THRESHOLD = 0.40  
+
+if not os.path.exists(DB_FILE):
+    print("[CRITICAL] Database empty or missing. Please run 'manual_data_collection.py' first.")
+    exit()
+
+with open(DB_FILE, "rb") as f:
+    database = pickle.load(f)
+
+# Flatten embeddings but track full metadata
+known_embeddings = []
+known_profiles = []
+
+for user_id, profile in database.items():
+    for embedding in profile["embeddings"]:
+        known_embeddings.append(embedding)
+        known_profiles.append(profile)
+
+print(f"Loaded {len(database)} registered people ({len(known_embeddings)} training encodings)")
+print("Launching DeepFace Multi-Face Recognition Dashboard... (Press 'q' to close)")
+
+# Initialize fast OpenCV face detector for the live feed bounding boxes
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+cam = cv2.VideoCapture(0)
+cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+# Track face identity across frames for temporal smoothing
+frame_history = {} 
+
+def compute_cosine_distance(source_emb, test_emb):
+    """Calculate the cosine distance between two DeepFace embeddings."""
+    a = np.array(source_emb)
+    b = np.array(test_emb)
+    return 1.0 - (np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+while True:
+    ret, frame = cam.read()
+    
+    if not ret:
+        print("[ERROR] Webcam connection lost.")
+        break
+
+    # Flip for mirror view
+    frame = cv2.flip(frame, 1)
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # 1. Fast Bounding Box Detection
+    faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+
+    for (x, y, w, h) in faces:
+        # Add slight padding to the crop so DeepFace sees the whole chin/forehead
+        pad = int(w * 0.1)
+        y1, y2 = max(0, y - pad), min(frame.shape[0], y + h + pad)
+        x1, x2 = max(0, x - pad), min(frame.shape[1], x + w + pad)
+        
+        # Crop just the face
+        face_roi = frame[y1:y2, x1:x2]
+        rgb_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
+
+        try:
+            # 2. Extract DeepFace Embedding (Using 'skip' to ensure high FPS)
+            results = DeepFace.represent(
+                img_path=rgb_roi, 
+                model_name="Facenet512", 
+                detector_backend="skip", # Skips internal detection since we already cropped it
+                enforce_detection=False
+            )
+            
+            current_embedding = results[0]["embedding"]
+            
+            # 3. Compute distances against database
+            face_distances = [compute_cosine_distance(current_embedding, known) for known in known_embeddings]
+            
+            # Find the best (minimum distance) match
+            best_match_idx = np.argmin(face_distances)
+            best_distance = face_distances[best_match_idx]
+            
+        except Exception:
+            # If DeepFace fails to process the blurry ROI, skip this frame
+            continue
+            
+        name = "Unknown Person"
+        dept = "Access Denied"
+        color = (0, 0, 255)  # Alert Red
+        confidence = 0.0
+        
+        # 4. Check tolerance threshold for match
+        if best_distance <= TOLERANCE:
+            matched_profile = known_profiles[best_match_idx]
+            name = matched_profile["name"]
+            dept = matched_profile["dept"] if matched_profile["dept"] else "Verified"
+            color = (0, 255, 0)  # Secure Green
+            
+            # Normalize confidence to 0-1 range based on Cosine Distance
+            confidence = max(0.0, min(1.0, 1.0 - (best_distance / TOLERANCE)))
+            
+            # Temporal smoothing - boost confidence if same person in adjacent frame
+            face_id = name 
+            if face_id in frame_history:
+                prev_name, prev_dept, prev_conf, frame_count = frame_history[face_id]
+                if prev_name == name:
+                    confidence = min(1.0, confidence * (1 + frame_count * 0.1))
+                    frame_history[face_id] = (name, dept, confidence, frame_count + 1)
+                else:
+                    frame_history[face_id] = (name, dept, confidence, 1)
+            else:
+                frame_history[face_id] = (name, dept, confidence, 1)
+
+        # 5. Draw bounding box and label (Your custom UI)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+        cv2.rectangle(frame, (x, y + h), (x + w, y + h + 35), color, cv2.FILLED)
+        
+        label = f"{name} | {dept}"
+        if confidence > 0:
+            label += f" ({confidence:.0%})"
+        
+        cv2.putText(frame, label, (x + 6, y + h + 22), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+
+    # Master UI metrics
+    cv2.putText(frame, f"Active Targets Monitored: {len(faces)}", (15, 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2, cv2.LINE_AA)
+    
+    cv2.putText(frame, f"DeepFace Facenet512 | Cosine Tol: {TOLERANCE}", 
+                (15, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
+                
+    cv2.imshow("Multi-Face Live Display Dashboard (DeepFace)", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cam.release()
+cv2.destroyAllWindows()

@@ -37,7 +37,7 @@ STALE_AFTER       = 60     # frames before a vanished face track is evicted
 NUM_WORKERS       = 3      # [OPTIMIZED] Threads 3ක් භාවිතයෙන් CPU එක හිර නොවී වේගවත් වැඩ කරයි
 
 # ── Attendance logging threshold ───────────────────────────────────────────────
-LOG_CONF_THRESHOLD = 0.60
+LOG_CONF_THRESHOLD = 0.2
 
 # ── Use all physical cores OpenCV is allowed to see ──────────────────────────
 cv2.setNumThreads(0)
@@ -69,9 +69,14 @@ for profile in database.values():
         raw_embeddings.append(emb)
         known_profiles.append(profile)
 
-emb_matrix        = np.array(raw_embeddings, dtype=np.float32)
-norms             = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
-emb_matrix_normed = emb_matrix / norms      # shape: (N, 512)
+if len(raw_embeddings) == 0:
+    print("[WARNING] Database is completely empty! Please register someone first.")
+    emb_matrix_normed = np.empty((0, 512), dtype=np.float32)
+else:
+    # Pre-normalise all embeddings once
+    emb_matrix        = np.array(raw_embeddings, dtype=np.float32)
+    norms             = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
+    emb_matrix_normed = emb_matrix / norms      # shape: (N, 512)
 
 print(f"[OK] Loaded {len(database)} people  |  {len(raw_embeddings)} embeddings")
 
@@ -105,6 +110,9 @@ detector = cv2.FaceDetectorYN.create(
 #  FAST VECTORISED COSINE MATCH
 # ═══════════════════════════════════════════════════════════════════════════════
 def match_embedding(query_emb: np.ndarray):
+    if len(emb_matrix_normed) == 0:
+        return "Unknown Person", "Access Denied", 0.0, (0, 0, 220)
+        
     q = query_emb.astype(np.float32)
     norm = np.linalg.norm(q)
     if norm == 0:
@@ -331,22 +339,69 @@ class CameraStream:
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MAIN LOOP
 # ═══════════════════════════════════════════════════════════════════════════════
-cam = CameraStream(0).start()
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MAIN LOOP
+# ═══════════════════════════════════════════════════════════════════════════════
+engine_active = True
+current_source = "0"
+
+def parse_source(src):
+    return int(src) if str(src).isdigit() else src
+
+cam = CameraStream(parse_source(current_source)).start()
 time.sleep(1.0) 
 
 frame_count  = 0
 face_counter = 0
 fps_times    = deque(maxlen=30)
+last_settings_check = time.time()
 
 print("Recognition dashboard live — press 'q' to quit")
-print(f"[ATTENDANCE] Logging to http://localhost:5000  |  conf threshold: {LOG_CONF_THRESHOLD:.0%}")
+print(f"[ATTENDANCE] Logging to {FLASK_URL}  |  conf threshold: {LOG_CONF_THRESHOLD:.0%}")
 
 _last_reset_hour = -1
-
-# පළමු Frame එක ආ විට Detector එකේ සැබෑ සයිස් එක auto-adjust කිරීමට යොදයි (Safety measure)
 detector_size_set = False
 
 while True:
+    # 1. Check Dashboard Settings Every 2 Seconds
+    if time.time() - last_settings_check > 2.0:
+        try:
+            resp = requests.get(f"{FLASK_URL}/api/engine_settings", timeout=1).json()
+            new_active = resp.get("is_active", True)
+            new_source = resp.get("camera_source", "0")
+
+            if new_active != engine_active or new_source != current_source:
+                print(f"[ENGINE] Settings changed -> Active: {new_active}, Source: {new_source}")
+                engine_active = new_active
+                current_source = new_source
+
+                # Release current camera lock
+                cam.stop()
+                
+                if engine_active:
+                    time.sleep(1.0) # Give OS time to fully release hardware
+                    cam = CameraStream(parse_source(current_source)).start()
+                    detector_size_set = False # Needs reset for new camera resolution
+                    
+        except Exception:
+            pass # Backend might be temporarily offline
+        last_settings_check = time.time()
+
+    # 2. If Engine is OFF, send Standby Screen to Dashboard
+    if not engine_active:
+        standby = np.zeros((STREAM_H, STREAM_W, 3), dtype=np.uint8)
+        cv2.putText(standby, "AI ENGINE OFFLINE", (STREAM_W//2 - 90, STREAM_H//2 - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        cv2.putText(standby, "Camera Released. Use Dashboard to turn ON.", (STREAM_W//2 - 150, STREAM_H//2 + 20), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+        
+        _, jpeg = cv2.imencode('.jpg', standby, [cv2.IMWRITE_JPEG_QUALITY, 50])
+        stream_queue.append(jpeg.tobytes())
+        
+        time.sleep(0.5)
+        continue
+
+    # 3. Normal camera reading (Engine is ON)
     ret, frame = cam.read()
     if not ret or frame is None:
         time.sleep(0.01)
@@ -359,6 +414,8 @@ while True:
         detector_size_set = True
 
     t0 = time.perf_counter()
+    
+    # --- මින් පහළට ඇති ඔබගේ පැරණි කේතය එලෙසම තබන්න (frame_count += 1, ආදිය) ---
     frame_count += 1
     frame = cv2.flip(frame, 1)
 

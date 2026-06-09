@@ -1,3 +1,15 @@
+<?php
+$userName   = "root";
+$password   = "";
+$database   = "face_attendance";
+$servername = "localhost";
+
+$conn = new mysqli($servername, $userName, $password, $database);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,17 +18,24 @@
 <title>Employee Face Registration System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root{
+  /* ── Dashboard-matching palette ── */
   --bg-dark:#0d0d1a;
   --bg-panel:#131326;
   --bg-card:#1a1a35;
   --bg-entry:#0d0d2a;
-  --accent:#4f8ef7;
-  --accent2:#7c3aed;
-  --success:#22c55e;
+
+  /* Dashboard purple/blue gradient colours */
+  --grad-a:#667eea;
+  --grad-b:#764ba2;
+
+  --accent:#667eea;
+  --accent2:#764ba2;
+  --success:#10b981;
   --warning:#f59e0b;
   --danger:#ef4444;
   --text-pri:#e8e8ff;
@@ -37,10 +56,10 @@ body{
   overflow:hidden;
 }
 
-/* ── Header ── */
+/* ── Header — matches dashboard gradient bar ── */
 header{
-  background:var(--bg-panel);
-  border-bottom:1px solid var(--border);
+  background:linear-gradient(135deg,var(--grad-a) 0%,var(--grad-b) 100%);
+  border-bottom:1px solid rgba(255,255,255,0.12);
   padding:0 24px;
   height:64px;
   display:flex;
@@ -48,9 +67,10 @@ header{
   gap:0;
   flex-shrink:0;
   position:relative;
+  box-shadow:0 4px 12px rgba(0,0,0,0.3);
 }
 .hdr-icon{
-  color:var(--accent);
+  color:#fff;
   font-family:var(--mono);
   font-size:22px;
   margin-right:12px;
@@ -62,14 +82,14 @@ header{
 .hdr-title h1{
   font-family:var(--mono);
   font-size:15px;
-  font-weight:400;
-  color:var(--accent);
+  font-weight:700;
+  color:#fff;
   letter-spacing:0.04em;
 }
 .hdr-title span{
   font-family:var(--mono);
   font-size:8px;
-  color:var(--text-sec);
+  color:rgba(255,255,255,0.65);
   letter-spacing:0.1em;
   margin-top:2px;
 }
@@ -77,12 +97,34 @@ header{
   margin-left:auto;
   font-family:var(--mono);
   font-size:9px;
-  color:var(--accent2);
-  border:1px solid var(--accent2);
-  padding:3px 10px;
-  border-radius:2px;
+  color:#fff;
+  background:rgba(255,255,255,0.15);
+  border:1px solid rgba(255,255,255,0.3);
+  padding:4px 12px;
+  border-radius:6px;
   letter-spacing:0.06em;
+  backdrop-filter:blur(4px);
 }
+
+/* ── Dashboard button ── */
+.btn-dashboard{
+  margin-left:14px;
+  background:#10b981;
+  color:#fff;
+  padding:8px 15px;
+  border-radius:6px;
+  text-decoration:none;
+  font-family:var(--sans);
+  font-size:14px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+  transition:opacity 0.15s,transform 0.15s;
+  box-shadow:0 2px 8px rgba(16,185,129,0.35);
+}
+.btn-dashboard:hover{opacity:0.88;transform:translateY(-1px);color:#fff;}
 
 /* ── Body layout ── */
 main{
@@ -110,7 +152,7 @@ main{
 .section-header span{
   font-family:var(--mono);
   font-size:8px;
-  color:var(--accent2);
+  color:rgba(255,255,255,0.55);
   letter-spacing:0.14em;
   white-space:nowrap;
 }
@@ -131,15 +173,18 @@ main{
   width:100%;
   background:var(--bg-entry);
   border:1px solid var(--border);
-  border-radius:3px;
+  border-radius:6px;
   color:var(--text-pri);
   font-family:var(--mono);
   font-size:12px;
   padding:9px 12px;
   outline:none;
-  transition:border-color 0.15s;
+  transition:border-color 0.15s,box-shadow 0.15s;
 }
-.field input:focus{border-color:var(--accent);}
+.field input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(102,126,234,0.15);
+}
 .field input::placeholder{color:var(--text-sec);opacity:0.6;}
 .field input:disabled{opacity:0.45;cursor:not-allowed;}
 
@@ -168,21 +213,21 @@ main{
   transition:color 0.2s;
 }
 .pose-row.active .pose-dot,.pose-row.active .pose-lbl{color:var(--accent);}
-.pose-row.done .pose-dot,.pose-row.done .pose-lbl{color:var(--success);}
+.pose-row.done   .pose-dot,.pose-row.done   .pose-lbl{color:var(--success);}
 .pose-row.skipped .pose-dot,.pose-row.skipped .pose-lbl{color:var(--text-sec);opacity:0.4;text-decoration:line-through;}
 
-/* Progress bar */
+/* Progress bar — matches dashboard gradient */
 .prog-wrap{padding:4px 16px 12px;}
 .prog-bg{
-  height:4px;
+  height:6px;
   background:var(--bg-entry);
-  border-radius:2px;
+  border-radius:3px;
   overflow:hidden;
 }
 .prog-fill{
   height:100%;
-  background:linear-gradient(90deg,var(--accent2),var(--accent));
-  border-radius:2px;
+  background:linear-gradient(90deg,var(--grad-a),var(--grad-b));
+  border-radius:3px;
   width:0%;
   transition:width 0.4s ease;
 }
@@ -194,28 +239,43 @@ main{
   margin-top:4px;
 }
 
-/* Buttons */
+/* Buttons — match dashboard style */
 .btn-block{padding:0 16px 8px;}
 .btn{
   width:100%;
   padding:10px 14px;
-  border-radius:3px;
+  border-radius:6px;
   border:1px solid var(--border);
   background:transparent;
   color:var(--text-pri);
-  font-family:var(--mono);
-  font-size:10px;
-  letter-spacing:0.07em;
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:0.04em;
   cursor:pointer;
-  transition:opacity 0.15s,background 0.15s,border-color 0.15s;
+  transition:opacity 0.15s,background 0.15s,border-color 0.15s,transform 0.15s,box-shadow 0.15s;
   text-align:center;
   margin-bottom:6px;
 }
-.btn:hover:not(:disabled){opacity:0.85;}
+.btn:hover:not(:disabled){opacity:0.85;transform:translateY(-1px);}
 .btn:disabled{opacity:0.3;cursor:not-allowed;}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
-.btn.success{background:var(--success);border-color:var(--success);color:#fff;font-weight:600;}
-.btn.muted{background:var(--bg-card);color:var(--text-sec);border-color:var(--border);}
+.btn.primary{
+  background:linear-gradient(135deg,var(--grad-a) 0%,var(--grad-b) 100%);
+  border-color:transparent;
+  color:#fff;
+  box-shadow:0 4px 12px rgba(102,126,234,0.3);
+}
+.btn.success{
+  background:var(--success);
+  border-color:var(--success);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(16,185,129,0.3);
+}
+.btn.muted{
+  background:var(--bg-card);
+  color:var(--text-sec);
+  border-color:var(--border);
+}
 .btn-row-2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:0;}
 
 /* Status */
@@ -240,31 +300,38 @@ main{
   align-items:center;
   gap:8px;
   padding:12px 16px 8px;
+  border-bottom:1px solid var(--border);
 }
 .cam-top span{
-  font-family:var(--mono);
-  font-size:10px;
+  font-family:var(--sans);
+  font-size:13px;
   color:var(--text-pri);
   font-weight:600;
-  letter-spacing:0.1em;
+  letter-spacing:0.06em;
 }
 #liveDot{
-  width:8px;height:8px;
+  width:10px;height:10px;
   border-radius:50%;
   background:var(--border);
   flex-shrink:0;
   transition:background 0.3s;
 }
-#liveDot.on{background:var(--success);box-shadow:0 0 6px var(--success);}
+#liveDot.on{
+  background:var(--success);
+  box-shadow:0 0 8px var(--success);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
 
 .cam-frame{
   position:relative;
   flex:1;
   background:#050510;
   overflow:hidden;
-  margin:0 14px;
-  border-radius:3px;
+  margin:12px 14px;
+  border-radius:12px;
   border:1px solid var(--border);
+  box-shadow:0 4px 12px rgba(0,0,0,0.3);
 }
 #videoEl{
   width:100%;height:100%;
@@ -282,16 +349,19 @@ main{
   gap:14px;
   background:#050510;
 }
-.idle-icon{font-family:var(--mono);font-size:60px;color:var(--border);}
+.idle-icon{
+  font-size:60px;
+  color:var(--border);
+}
 #idleScreen p{font-family:var(--mono);font-size:11px;color:var(--text-sec);}
 
-/* Face detection canvas drawn on top of video */
+/* Face detection canvas */
 #overlayCanvas{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
-  object-fit:cover; /* Ensures canvas scales identically to the video */
+  object-fit:cover;
   pointer-events:none;
 }
 
@@ -300,7 +370,7 @@ main{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:8px 16px 12px;
+  padding:8px 16px 14px;
   flex-shrink:0;
 }
 #instrText{
@@ -313,7 +383,7 @@ main{
 #counterText{
   font-family:var(--mono);
   font-size:10px;
-  color:var(--accent2);
+  color:var(--accent);
   font-weight:600;
 }
 
@@ -322,13 +392,15 @@ main{
   position:fixed;
   bottom:28px;left:50%;
   transform:translateX(-50%) translateY(20px);
-  background:var(--bg-panel);
-  border:1px solid var(--border);
-  color:var(--text-pri);
-  font-family:var(--mono);
-  font-size:11px;
-  padding:10px 20px;
-  border-radius:3px;
+  background:white;
+  border-left:4px solid var(--success);
+  color:#333;
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:500;
+  padding:12px 20px;
+  border-radius:8px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.15);
   opacity:0;
   transition:opacity 0.25s,transform 0.25s;
   pointer-events:none;
@@ -337,16 +409,17 @@ main{
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-/* Processing spinner overlay on cam */
+/* Processing spinner overlay */
 #spinnerOverlay{
   position:absolute;
   inset:0;
-  background:rgba(5,5,16,0.7);
+  background:rgba(5,5,16,0.75);
   display:none;
   align-items:center;
   justify-content:center;
   flex-direction:column;
   gap:12px;
+  border-radius:12px;
 }
 #spinnerOverlay.visible{display:flex;}
 .spinner{
@@ -357,33 +430,44 @@ main{
   animation:spin 0.8s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-#spinnerOverlay p{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.1em;}
+#spinnerOverlay p{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--accent);
+  letter-spacing:0.1em;
+}
 
-/* ── Success banner ── */
+/* ── Success banner — matches dashboard card style ── */
 #successBanner{
   display:none;
   margin:0 16px 10px;
-  background:rgba(34,197,94,0.07);
+  background:rgba(16,185,129,0.08);
   border:1px solid var(--success);
-  border-radius:3px;
-  padding:12px 14px;
+  border-radius:8px;
+  padding:14px 16px;
   font-family:var(--mono);
   font-size:9px;
   color:var(--success);
-  line-height:1.9;
+  line-height:2;
   letter-spacing:0.04em;
+  box-shadow:0 2px 8px rgba(16,185,129,0.1);
 }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="hdr-icon">◈</div>
+  <div class="hdr-icon"><i class="bi bi-camera-video-fill"></i></div>
   <div class="hdr-title">
-    <h1>Employee Face Registration System</h1>
+    <h1><i class="bi bi-person-badge"></i> Employee Face Registration System</h1>
     <span>DeepFace · Facenet512 · RetinaFace</span>
   </div>
   <div class="hdr-badge" id="hdrBadge">Registered: 0 employees</div>
+
+  <!-- ── CHANGE 1: Dashboard navigation button ── -->
+  <a href="dashboard.php" class="btn-dashboard">
+    <i class="bi bi-speedometer2"></i> Attendance Dashboard
+  </a>
 </header>
 
 <main>
@@ -414,7 +498,7 @@ main{
       <div class="section-line"></div>
     </div>
     <div class="poses-block" id="posesBlock">
-      </div>
+    </div>
     <div class="prog-wrap">
       <div class="prog-bg"><div class="prog-fill" id="progFill"></div></div>
       <div class="prog-label" id="progLabel">0 / 5</div>
@@ -447,7 +531,7 @@ main{
       <video id="videoEl" autoplay playsinline muted style="display:none;"></video>
       <canvas id="overlayCanvas"></canvas>
       <div id="idleScreen">
-        <div class="idle-icon">◈</div>
+        <div class="idle-icon"><i class="bi bi-camera-video" style="font-size:60px;color:var(--border);"></i></div>
         <p>Camera starts after registration begins</p>
       </div>
       <div id="spinnerOverlay">
@@ -482,7 +566,7 @@ let currentPose = 0;
 let poseStates = POSES.map(() => 'pending'); 
 let capturing  = false;
 let liveDotInterval = null;
-let liveDetectInterval = null; // Polling loop identifier
+let liveDetectInterval = null;
 let faceBoxes  = []; 
 let registeredCount = 0;
 
@@ -578,7 +662,6 @@ async function pollFaceDetection() {
   if (!vid.videoWidth || !vid.videoHeight) return;
 
   const canvas = document.createElement('canvas');
-  // Shrink the canvas down to 300x300 to match backend and speed up the network
   canvas.width = 300; 
   canvas.height = 300;
   const ctx = canvas.getContext('2d');
@@ -600,7 +683,6 @@ async function pollFaceDetection() {
     
     const data = await res.json();
     if (data && data.face_boxes !== undefined) {
-      // Scale coordinates back up to fit original screen size
       const scaleX = vid.videoWidth / 300;
       const scaleY = vid.videoHeight / 300;
       
@@ -631,7 +713,6 @@ function drawFaceBoxes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   faceBoxes.forEach(b => {
-    // OpenCV Desktop style: bright green, thin line, percentage top-left
     ctx.strokeStyle = '#00ff00';
     ctx.lineWidth = 2;
     ctx.strokeRect(b.x, b.y, b.w, b.h);
@@ -655,7 +736,6 @@ async function startCamera() {
     startDot();
     drawFaceBoxes();
     
-    // Poll fast (150ms) for smoother visual tracking
     if (liveDetectInterval) clearInterval(liveDetectInterval);
     liveDetectInterval = setInterval(pollFaceDetection, 150);
     
@@ -717,7 +797,6 @@ async function capturePose() {
   showSpinner(true);
   setStatus('🔄  DeepFace processing… hold still', 'var(--warning)');
 
-  // Grab the full resolution frame for accuracy
   const vid    = document.getElementById('videoEl');
   const canvas = document.createElement('canvas');
   canvas.width  = vid.videoWidth  || 640;

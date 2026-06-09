@@ -8,7 +8,7 @@ Shift: 9 AM – 10 PM | Location: Front Door
 import os
 import threading
 import logging
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from pathlib import Path
 import cv2
 import numpy as np
@@ -134,8 +134,22 @@ init_db()
 #  DATABASE HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 def rows_as_dicts(cursor):
+    """
+    Fetch MySQL rows as dicts and convert timedeltas/dates into JSON-serializable strings.
+    """
     cols = [d[0] for d in cursor.description]
-    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+    out = []
+    for row in cursor.fetchall():
+        d = {}
+        for i, val in enumerate(row):
+            if isinstance(val, timedelta):
+                d[cols[i]] = str(val) # JSON serializable fix
+            elif isinstance(val, (datetime, date)):
+                d[cols[i]] = val.isoformat() # JSON serializable fix
+            else:
+                d[cols[i]] = val
+        out.append(d)
+    return out
 
 def get_today_attendance():
     conn = get_db()
@@ -212,13 +226,11 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'attendance-secret-key-change-in-prod'
 CORS(app)
 
-# --- වෙනස් කළ කොටස: async_mode='threading' හරහා කාර්යක්ෂමතාවය වැඩි කර ඇත ---
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  NEW: EMPLOYEE REGISTRATION API ENDPOINTS
+#  EMPLOYEE REGISTRATION API ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
-# Temporary session to hold data during the 5 poses
 registration_session = {
     'emp_id': '',
     'name': '',
@@ -226,7 +238,6 @@ registration_session = {
     'embeddings': []
 }
 
-# Load OpenCV DNN for fast live detection bounding boxes on the website
 dnn_net = None
 PROTOTXT_PATH = "deploy.prototxt"
 CAFFEMODEL_PATH = "res10_300x300_ssd_iter_140000.caffemodel"
@@ -236,10 +247,29 @@ try:
         logger.info("OpenCV DNN loaded for web registration live view.")
 except Exception as e:
     logger.warning(f"Could not load OpenCV DNN: {e}")
+# ═══════════════════════════════════════════════════════════════════════════════
+#  AI ENGINE SETTINGS (Camera ON/OFF & Source)
+# ═══════════════════════════════════════════════════════════════════════════════
+engine_settings = {
+    "is_active": True,
+    "camera_source": "0"  # '0' for local webcam, 'rtsp://...' for IP camera
+}
 
+@app.route('/api/engine_settings', methods=['GET', 'POST'])
+def handle_engine_settings():
+    global engine_settings
+    if request.method == 'POST':
+        data = request.get_json()
+        if 'is_active' in data:
+            engine_settings['is_active'] = data['is_active']
+        if 'camera_source' in data:
+            engine_settings['camera_source'] = str(data['camera_source'])
+        logger.info(f"Engine Settings Updated: Active={engine_settings['is_active']}, Source={engine_settings['camera_source']}")
+        return jsonify({"success": True, "settings": engine_settings})
+    
+    return jsonify(engine_settings)
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Returns total registered count for the dashboard badge."""
     try:
         conn = get_db()
         c = conn.cursor()
@@ -252,7 +282,6 @@ def health_check():
 
 @app.route('/check_id', methods=['GET'])
 def check_id():
-    """Checks if employee ID is already taken."""
     user_id = request.args.get('user_id')
     try:
         conn = get_db()
@@ -266,9 +295,8 @@ def check_id():
 
 @app.route('/set_meta', methods=['POST'])
 def set_meta():
-    """Initializes a new registration session."""
     global registration_session
-    data = request.get_json()
+    data = request.get_json(force=True, silent=True) or {}
     registration_session['emp_id'] = data.get('user_id', '').strip()
     registration_session['name'] = data.get('name', '').strip()
     registration_session['outlet'] = data.get('outlet', '').strip()
@@ -277,14 +305,12 @@ def set_meta():
 
 @app.route('/reset', methods=['POST'])
 def reset_reg():
-    """Clears the ongoing registration session."""
     global registration_session
     registration_session = {'emp_id': '', 'name': '', 'outlet': '', 'embeddings': []}
     return jsonify({"success": True})
 
 @app.route('/live_detect', methods=['POST'])
 def live_detect():
-    """Fast polling endpoint for the green bounding box on index.php."""
     try:
         data = request.get_json()
         img_b64 = data.get('image', '').split(',')[1]
@@ -301,7 +327,7 @@ def live_detect():
             
             for i in range(detections.shape[2]):
                 conf = detections[0, 0, i, 2]
-                if conf > 0.6:  # 60% confidence threshold
+                if conf > 0.6: 
                     box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                     x1, y1, x2, y2 = box.astype("int")
                     face_boxes.append({
@@ -316,7 +342,6 @@ def live_detect():
 
 @app.route('/capture', methods=['POST'])
 def capture_pose():
-    """Process high-res frame via DeepFace and extract Facenet512 embeddings."""
     global registration_session
     try:
         data = request.get_json()
@@ -327,7 +352,6 @@ def capture_pose():
 
         rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # DeepFace Processing (Retinaface + Facenet512)
         results = DeepFace.represent(
             img_path=rgb_img,
             model_name="Facenet512",
@@ -358,7 +382,6 @@ def capture_pose():
 
 @app.route('/save', methods=['POST'])
 def save_registration():
-    """Saves finalized embeddings to MySQL and Pickle file."""
     global registration_session
     try:
         emp_id = registration_session.get('emp_id')
@@ -369,10 +392,11 @@ def save_registration():
         if not emp_id or not name or not embeddings:
             return jsonify({"success": False, "message": "Missing data or no poses captured."}), 400
 
-        # 1. Save to MySQL (Table: employees)
         conn = get_db()
         c = conn.cursor()
-        emb_json = json.dumps(embeddings)
+        
+        clean_embeddings = [[float(val) for val in emb] for emb in embeddings]
+        emb_json = json.dumps(clean_embeddings)
 
         c.execute("""
             INSERT INTO employees (emp_id, name, outlet, face_embeddings)
@@ -380,14 +404,13 @@ def save_registration():
             ON DUPLICATE KEY UPDATE
             name=VALUES(name), outlet=VALUES(outlet), face_embeddings=VALUES(face_embeddings)
         """, (emp_id, name, outlet, emb_json))
+        
         conn.commit()
         
-        # Get latest total count
         c.execute("SELECT COUNT(*) FROM employees")
         total_registered = c.fetchone()[0]
         conn.close()
 
-        # 2. Save to Pickle File (for Display-v2.py)
         db_file = "deepface_database.pkl"
         db_data = {}
         if os.path.exists(db_file):
@@ -405,7 +428,6 @@ def save_registration():
         with open(db_file, "wb") as f:
             pickle.dump(db_data, f)
 
-        # Clear session after successful save
         registration_session = {'emp_id': '', 'name': '', 'outlet': '', 'embeddings': []}
 
         logger.info(f"New Employee Registered: {name} ({emp_id})")
@@ -417,38 +439,52 @@ def save_registration():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  EXISTING REST API ENDPOINTS
+#  ATTENDANCE REST API ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.route('/api/event', methods=['POST'])
 def log_event():
-    """Receive clock-in / clock-out from recognition engine."""
     try:
         data       = request.get_json()
-        emp_id     = data.get('employee_id')
+        # [FIXED] ID එක සඳහා වඩාත් ආරක්ෂිත ක්‍රමයක් 
+        emp_id     = data.get('employee_id') or data.get('emp_id')
         name       = data.get('name')
         dept       = data.get('dept', 'Unassigned')
         conf       = float(data.get('confidence', 0.0))
         snapshot   = data.get('snapshot_path')
-        event_type = data.get('event_type', 'clock_in')
+        event_type = data.get('event_type', 'auto') 
 
         if not emp_id or not name:
             return jsonify({'error': 'Missing employee_id or name'}), 400
 
         conn     = get_db()
         c        = conn.cursor()
-        today    = datetime.now().strftime("%Y-%m-%d")
         now_dt   = datetime.now()
         now_time = now_dt.strftime("%H:%M:%S")
 
-        # ── CLOCK-IN ──────────────────────────────────────────────────────────
+        # [FIXED] DATE(check_in) = today කොටස ඉවත් කර ඇත. ඒ වෙනුවට අවසන් වරට Check in වී 
+        # Check out නොවී ඇති record එක පමණක් තෝරා ගනී (රෑ 12න් පසුව වුවත් වැඩ කරයි).
+        c.execute("""
+            SELECT id, check_in FROM attendance
+            WHERE emp_id = %s AND check_out IS NULL
+            ORDER BY check_in DESC LIMIT 1
+        """, (emp_id,))
+        active_session = c.fetchone()
+
+        if event_type == 'auto':
+            if not active_session:
+                event_type = 'clock_in'
+            else:
+                if now_dt.hour >= SHIFT_END: 
+                    event_type = 'clock_out'
+                else:
+                    conn.close()
+                    return jsonify({'message': f'{name} already clocked in. Waiting for shift end.'}), 200
+
+        # --- CLOCK IN ---
         if event_type == 'clock_in':
-            c.execute("""
-                SELECT id FROM attendance
-                WHERE emp_id = %s AND DATE(check_in) = %s AND check_out IS NULL
-            """, (emp_id, today))
-            if c.fetchone():
-                conn.close()
-                return jsonify({'error': 'Already clocked in today'}), 409
+            if active_session:
+                 conn.close()
+                 return jsonify({'error': 'Already clocked in today'}), 409
 
             c.execute("""
                 INSERT INTO attendance
@@ -461,71 +497,50 @@ def log_event():
             record_id = c.lastrowid
             conn.close()
 
-            threading.Thread(
-                target=log_activity, args=(emp_id, conf, 'active'), daemon=True
-            ).start()
-
-            logger.info(f"Clock-in: {name} ({emp_id}) at {now_time} | conf={conf:.2f}")
+            threading.Thread(target=log_activity, args=(emp_id, conf, 'active'), daemon=True).start()
+            logger.info(f"Clock-in: {name} ({emp_id}) at {now_time}")
+            
             socketio.emit('clock_in_event', {
-                'employee_id':  emp_id,
-                'name':         name,
-                'dept':         dept,
-                'time':         now_time,
-                'confidence':   conf,
-                'snapshot_path': snapshot
+                'employee_id':  emp_id, 'name': name, 'dept': dept,
+                'time': now_time, 'confidence': conf, 'snapshot_path': snapshot
             }, broadcast=True)
 
-            return jsonify({'success': True, 'record_id': record_id,
-                            'event': 'clock_in'}), 201
+            return jsonify({'success': True, 'record_id': record_id, 'event': 'clock_in'}), 201
 
-        # ── CLOCK-OUT ─────────────────────────────────────────────────────────
+        # --- CLOCK OUT ---
         elif event_type == 'clock_out':
-            if now_dt.hour < SHIFT_END:
-                conn.close()
-                return jsonify({
-                    'error': f'Clock-out window not open. Opens at {SHIFT_END}:00'
-                }), 403
-
-            c.execute("""
-                SELECT id FROM attendance
-                WHERE emp_id = %s AND DATE(check_in) = %s AND check_out IS NULL
-            """, (emp_id, today))
-            row = c.fetchone()
-            if not row:
+            if not active_session:
                 conn.close()
                 return jsonify({'error': 'Not clocked in today'}), 409
+                
+            attendance_id = active_session[0]
+            check_in_dt   = active_session[1]
 
-            attendance_id = row[0]
+            duration_mins = None
+            if check_in_dt:
+                duration_mins = int((now_dt - check_in_dt).total_seconds() / 60)
 
             c.execute("""
-                INSERT INTO pending_clockouts
-                    (emp_id, name, confidence, snapshot_path, attendance_id)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (emp_id, name, conf, snapshot, attendance_id))
+                UPDATE attendance
+                SET check_out = %s, clock_out_time = %s, clock_out_conf = %s,
+                    clock_out_snapshot = %s, duration_mins = %s, att_status = 'completed'
+                WHERE id = %s
+            """, (now_dt, now_time, conf, snapshot, duration_mins, attendance_id))
             conn.commit()
-            pending_id = c.lastrowid
             conn.close()
 
-            threading.Thread(
-                target=log_activity, args=(emp_id, conf, 'active'), daemon=True
-            ).start()
-
-            logger.info(f"Clock-out pending: {name} ({emp_id}) at {now_time} | conf={conf:.2f}")
-            socketio.emit('clock_out_pending', {
-                'pending_id':           pending_id,
-                'employee_id':          emp_id,
-                'name':                 name,
-                'dept':                 dept,
-                'time':                 now_time,
-                'confidence':           conf,
-                'snapshot_path':        snapshot,
-                'attendance_record_id': attendance_id
+            threading.Thread(target=log_activity, args=(emp_id, conf, 'idle'), daemon=True).start()
+            logger.info(f"Clock-out: {name} ({emp_id}) at {now_time}")
+            
+            socketio.emit('clock_out_confirmed', {
+                'employee_id': emp_id, 'name': name, 'time': now_time,
+                'confidence': conf, 'duration_mins': duration_mins
             }, broadcast=True)
 
-            return jsonify({'success': True, 'pending_id': pending_id,
-                            'event': 'clock_out_pending'}), 201
+            return jsonify({'success': True, 'event': 'clock_out_confirmed'}), 201
 
         else:
+            conn.close()
             return jsonify({'error': 'Unknown event_type'}), 400
 
     except Exception as e:
@@ -533,16 +548,33 @@ def log_event():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/attendance/today', methods=['GET'])
-def get_attendance_today():
-    try:
-        return jsonify({'success': True, 'data': get_today_attendance()}), 200
-    except Exception as e:
-        logger.error(f"/api/attendance/today: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/staff/clocked-in', methods=['GET'])
+@app.route('/api/attendance/monthly', methods=['GET'])
+def get_monthly_attendance():
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        # දැනට පවතින වර්ෂය සහ මාසය ලබාගැනීම (උදා: "2026-06")
+        current_month = datetime.now().strftime("%Y-%m")
+        
+        c.execute("""
+            SELECT 
+                a.id, a.emp_id, e.name, DATE(a.check_in) as date,
+                COALESCE(a.clock_in_time, TIME(a.check_in)) AS clock_in_time,
+                a.clock_out_time, a.duration_mins, a.outlet,
+                COALESCE(a.att_status, a.status) AS status
+            FROM attendance a
+            JOIN employees e ON a.emp_id = e.emp_id
+            WHERE DATE_FORMAT(a.check_in, '%Y-%m') = %s
+            ORDER BY a.check_in ASC
+        """, (current_month,))
+        
+        result = rows_as_dicts(c)
+        conn.close()
+        return jsonify({'success': True, 'data': result}), 200
+    except Exception as e:
+        logger.error(f"/api/attendance/monthly error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 def get_clocked_in():
     try:
         return jsonify({'success': True, 'data': get_clocked_in_staff()}), 200
@@ -550,92 +582,56 @@ def get_clocked_in():
         logger.error(f"/api/staff/clocked-in: {e}")
         return jsonify({'error': str(e)}), 500
 
+def get_clocked_in_staff():
+    conn  = get_db()
+    c     = conn.cursor()
+    # [FIXED] දින පරීක්ෂාව ඉවත් කළා.
+    c.execute("""
+        SELECT
+            a.id, a.emp_id AS employee_id, e.name,
+            COALESCE(a.clock_in_time, TIME(a.check_in)) AS clock_in_time,
+            a.clock_in_conf
+        FROM attendance a
+        JOIN employees e ON a.emp_id = e.emp_id
+        WHERE a.check_out IS NULL
+          AND COALESCE(a.att_status, a.status) = 'clocked_in'
+        ORDER BY a.check_in DESC
+    """)
+    result = rows_as_dicts(c)
+    conn.close()
+    return result
 
-@app.route('/api/clockout/confirm/<int:pending_id>', methods=['POST'])
-def confirm_clockout(pending_id):
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DELETE EMPLOYEE API ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.route('/api/employee/<emp_id>', methods=['DELETE'])
+def delete_employee(emp_id):
+    """Deletes an employee from MySQL and the deepface_database.pkl file."""
     try:
         conn = get_db()
-        c    = conn.cursor()
-
-        c.execute("""
-            SELECT attendance_id, emp_id, name, confidence, snapshot_path
-            FROM pending_clockouts WHERE id = %s
-        """, (pending_id,))
-        row = c.fetchone()
-        if not row:
-            conn.close()
-            return jsonify({'error': 'Pending clock-out not found'}), 404
-
-        attendance_id, emp_id, name, conf, snapshot = row
-
-        c.execute("SELECT check_in FROM attendance WHERE id = %s", (attendance_id,))
-        ci_row = c.fetchone()
-        now_dt       = datetime.now()
-        now_time     = now_dt.strftime("%H:%M:%S")
-        duration_mins = None
-        if ci_row and ci_row[0]:
-            try:
-                duration_mins = int((now_dt - ci_row[0]).total_seconds() / 60)
-            except Exception:
-                pass
-
-        c.execute("""
-            UPDATE attendance
-            SET check_out          = %s,
-                clock_out_time     = %s,
-                clock_out_conf     = %s,
-                clock_out_snapshot = %s,
-                duration_mins      = %s,
-                att_status         = 'completed'
-            WHERE id = %s
-        """, (now_dt, now_time, conf, snapshot, duration_mins, attendance_id))
-
-        c.execute("DELETE FROM pending_clockouts WHERE id = %s", (pending_id,))
+        c = conn.cursor()
+        c.execute("DELETE FROM attendance WHERE emp_id = %s", (emp_id,))
+        c.execute("DELETE FROM pending_clockouts WHERE emp_id = %s", (emp_id,))
+        c.execute("DELETE FROM employees WHERE emp_id = %s", (emp_id,))
         conn.commit()
         conn.close()
 
-        threading.Thread(
-            target=log_activity, args=(emp_id, conf, 'idle'), daemon=True
-        ).start()
-
-        logger.info(f"Clock-out confirmed: {name} ({emp_id}) at {now_time}")
-        socketio.emit('clock_out_confirmed', {
-            'employee_id':   emp_id,
-            'name':          name,
-            'time':          now_time,
-            'confidence':    conf,
-            'duration_mins': duration_mins
-        }, broadcast=True)
-
-        return jsonify({
-            'success':       True,
-            'message':       f'{name} clocked out',
-            'duration_mins': duration_mins
-        }), 200
+        db_file = "deepface_database.pkl"
+        if os.path.exists(db_file):
+            with open(db_file, "rb") as f:
+                db_data = pickle.load(f)
+            
+            if emp_id in db_data:
+                del db_data[emp_id]
+                with open(db_file, "wb") as f:
+                    pickle.dump(db_data, f)
+                    
+        logger.info(f"Employee {emp_id} deleted from database and PKL file.")
+        return jsonify({"success": True, "message": f"Employee {emp_id} deleted."})
 
     except Exception as e:
-        logger.error(f"/api/clockout/confirm: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/pending-clockouts', methods=['GET'])
-def get_pendings():
-    try:
-        return jsonify({'success': True, 'data': get_pending_clockouts()}), 200
-    except Exception as e:
-        logger.error(f"/api/pending-clockouts: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/snapshot/<path:filename>', methods=['GET'])
-def get_snapshot(filename):
-    try:
-        filepath = os.path.join(SNAPSHOTS_DIR, filename)
-        if os.path.exists(filepath):
-            return send_file(filepath, mimetype='image/jpeg')
-        return jsonify({'error': 'Snapshot not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Delete API error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -643,11 +639,9 @@ def get_snapshot(filename):
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.route('/api/video_frame', methods=['POST'])
 def api_video_frame():
-    """Receive JPEG bytes → push INSTANTLY to browser via WebSockets."""
     try:
         data = request.data
         if data:
-            # අලුතින් Background Task සාදමින් පෝලිම් ගැසීම වෙනුවට සෘජුවම emit කරයි
             b64 = base64.b64encode(data).decode('utf-8')
             socketio.emit('video_stream', {'frame': b64}, namespace='/')
             
@@ -669,24 +663,9 @@ def dashboard():
     ), 404
 
 
-@app.route('/api/employees', methods=['GET'])
-def get_employees():
-    try:
-        conn = get_db()
-        c    = conn.cursor()
-        c.execute("SELECT emp_id, name, outlet FROM employees ORDER BY name")
-        result = rows_as_dicts(c)
-        conn.close()
-        return jsonify({'success': True, 'data': result}), 200
-    except Exception as e:
-        logger.error(f"/api/employees: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 #  WEBSOCKET EVENTS
 # ═══════════════════════════════════════════════════════════════════════════════
-
 @socketio.on('connect')
 def handle_connect():
     logger.info(f"Client connected: {request.sid}")
@@ -712,7 +691,6 @@ def handle_attendance_request():
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
-
 if __name__ == '__main__':
     logger.info("=" * 80)
     logger.info("Face Recognition Attendance & Registration System  |  MySQL backend")

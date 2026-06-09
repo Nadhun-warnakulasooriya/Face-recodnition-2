@@ -459,11 +459,10 @@ main{
   <div class="hdr-icon"><i class="bi bi-camera-video-fill"></i></div>
   <div class="hdr-title">
     <h1><i class="bi bi-person-badge"></i> Employee Face Registration System</h1>
-    <span>DeepFace · Facenet512 · RetinaFace</span>
+    <span>DeepFace · Facenet512 · OpenCV</span>
   </div>
   <div class="hdr-badge" id="hdrBadge">Registered: 0 employees</div>
 
-  <!-- ── CHANGE 1: Dashboard navigation button ── -->
   <a href="dashboard.php" class="btn-dashboard">
     <i class="bi bi-speedometer2"></i> Attendance Dashboard
   </a>
@@ -550,6 +549,7 @@ main{
 <div id="toast"></div>
 
 <script>
+// මතක තබා ගන්න: සැබෑ සර්වර් එකේ (VPS) IP එක මෙතනට දෙන්න
 const API = 'http://localhost:5000';
 
 const POSES = [
@@ -744,7 +744,8 @@ async function startCamera() {
   }
 }
 
-/* ── Start registration ── */
+/* ── Start registration (RACE CONDITION FIXED) ── */
+/* ── Start registration (100% Instant Camera Fix) ── */
 async function startRegistration() {
   const empId   = document.getElementById('inpId').value.trim();
   const empName = document.getElementById('inpName').value.trim();
@@ -755,13 +756,8 @@ async function startRegistration() {
     return;
   }
 
-  try {
-    const res  = await fetch(`${API}/check_id?user_id=${encodeURIComponent(empId)}`);
-    const data = await res.json();
-    if (data.exists) {
-      if (!confirm(`ID '${empId}' is already registered. Overwrite?`)) return;
-    }
-  } catch(e) { }
+  // 1. කැමරාව මුලින්ම ඔන් කිරීම (සර්වර් එකට යන්න කලින් මේක වෙන නිසා කිසිම ප්‍රමාදයක් නෑ)
+  await startCamera();
 
   currentPose = 0;
   poseStates  = POSES.map(() => 'pending');
@@ -774,19 +770,39 @@ async function startRegistration() {
   document.getElementById('btnSkip').disabled    = false;
   document.getElementById('successBanner').style.display = 'none';
 
+  refreshPoses();
+
+  // 2. කැමරාව ඔන් වුණාට පස්සේ, ID එක කලින් තියෙනවද බලනවා
+  try {
+    const res  = await fetch(`${API}/check_id?user_id=${encodeURIComponent(empId)}`);
+    const data = await res.json();
+    if (data.exists) {
+      if (!confirm(`ID '${empId}' is already registered. Overwrite?`)) {
+          doReset();
+          return;
+      }
+    }
+  } catch(e) { 
+      console.error("ID Check error", e);
+  }
+
+  // 3. අනිවාර්යයෙන්ම await භාවිතා කර දත්ත යැවීම (දත්ත මැකීම වැළැක්වීමට)
   try {
     await fetch(`${API}/reset`, { method:'POST' });
     await fetch(`${API}/set_meta`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name:empName, user_id:empId, outlet }),
+      body: JSON.stringify({ 
+          company_id: <?php echo isset($_SESSION['company_id']) ? $_SESSION['company_id'] : 'null'; ?>,
+          name: empName, 
+          user_id: empId, 
+          outlet: outlet 
+      }),
     });
-  } catch(e) {}
-
-  refreshPoses();
-  await startCamera();
+  } catch(e) {
+      console.error(e);
+  }
 }
-
 /* ── Capture pose ── */
 async function capturePose() {
   if (capturing || currentPose >= POSES.length) return;

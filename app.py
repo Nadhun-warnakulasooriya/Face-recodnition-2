@@ -13,10 +13,17 @@ import cv2
 import numpy as np
 import base64
 import json
+import urllib.request # මේක අලුතින් එකතු කළා (ෆයිල් ඩවුන්ලෝඩ් කිරීමට)
 from deepface import DeepFace
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ADD THESE TWO LINES TO FIX THE NAMEERROR
+# ═══════════════════════════════════════════════════════════════════════════════
+import mysql.connector
+from mysql.connector import pooling
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  LOGGING
@@ -144,6 +151,7 @@ app.config['SECRET_KEY'] = 'saas-attendance-secret'
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  WEB REGISTRATION (DASHBOARD) ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -155,20 +163,21 @@ registration_session = {
     'embeddings': []
 }
 
-dnn_net = None
-PROTOTXT_PATH = "deploy.prototxt"
-CAFFEMODEL_PATH = "res10_300x300_ssd_iter_140000.caffemodel"
+# [NEW] ඉතාමත් සැහැල්ලු සහ වේගවත් Face Detector එක (Download වීම් අනවශ්‍යයි)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# --- AI PRE-WARMING (මෙයින් බොත්තම එබූ පසු හිරවීම වළක්වයි) ---
+logger.info("Pre-warming DeepFace Facenet512 Model. Please wait...")
 try:
-    if os.path.exists(PROTOTXT_PATH) and os.path.exists(CAFFEMODEL_PATH):
-        dnn_net = cv2.dnn.readNetFromCaffe(PROTOTXT_PATH, CAFFEMODEL_PATH)
+    _dummy_img = np.zeros((160, 160, 3), dtype=np.uint8)
+    DeepFace.represent(img_path=_dummy_img, model_name="Facenet512", detector_backend="opencv", enforce_detection=False)
+    logger.info("DeepFace Model loaded to RAM successfully!")
 except Exception as e:
-    pass
-
+    logger.warning(f"DeepFace pre-warm failed: {e}")
 @app.route('/set_meta', methods=['POST'])
 def set_meta():
     global registration_session
     data = request.get_json(force=True, silent=True) or {}
-    registration_session['company_id'] = data.get('company_id') # From PHP Session
+    registration_session['company_id'] = data.get('company_id') 
     registration_session['emp_id'] = data.get('user_id', '').strip()
     registration_session['name'] = data.get('name', '').strip()
     registration_session['outlet'] = data.get('outlet', '').strip()
@@ -191,26 +200,49 @@ def live_detect():
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         face_boxes = []
-        if dnn_net is not None:
-            h, w = img.shape[:2]
-            blob = cv2.dnn.blobFromImage(cv2.resize(img, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0))
-            dnn_net.setInput(blob)
-            detections = dnn_net.forward()
-            
-            for i in range(detections.shape[2]):
-                conf = detections[0, 0, i, 2]
-                if conf > 0.6: 
-                    box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                    x1, y1, x2, y2 = box.astype("int")
-                    face_boxes.append({
-                        "x": int(x1), "y": int(y1), "w": int(x2-x1), "h": int(y2-y1),
-                        "conf": f"{conf:.0%}"
-                    })
+        # අලුත් සැහැල්ලු ක්‍රමයට Bounding Box ඇඳීම
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
+        for (x, y, w, h) in faces:
+            face_boxes.append({
+                "x": int(x), "y": int(y), "w": int(w), "h": int(h),
+                "conf": "100%"
+            })
         return jsonify({"face_boxes": face_boxes})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/capture', methods=['POST'])
+def capture_pose():
+    global registration_session
+    try:
+        data = request.get_json()
+        img_b64 = data.get('image', '').split(',')[1]
+        img_data = base64.b64decode(img_b64)
+        nparr = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # [FIXED] retinaface වෙනුවට opencv යොදා ඇත. (VPS එක Crash නොවේ)
+        results = DeepFace.represent(img_path=rgb_img, model_name="Facenet512", detector_backend="opencv", enforce_detection=True)
+
+        if len(results) == 1:
+            emb = results[0]["embedding"]
+            registration_session['embeddings'].append(emb)
+            area = results[0].get('facial_area', {})
+            box = [{"x": area.get('x'), "y": area.get('y'), "w": area.get('w'), "h": area.get('h'), "conf": "100%"}] if area else []
+            return jsonify({"success": True, "face_boxes": box})
+        elif len(results) > 1:
+            return jsonify({"success": False, "message": "Multiple faces detected! Please stand alone."})
+        else:
+            return jsonify({"success": False, "message": "No face detected."})
+
+    except ValueError:
+        return jsonify({"success": False, "message": "Face not detected. Adjust lighting."})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
 def capture_pose():
     global registration_session
     try:
@@ -268,7 +300,6 @@ def save_registration():
         conn.commit()
         conn.close()
 
-        # සටහන: PKL ෆයිල් එක දැන් සර්වර් එකේ හැදෙන්නේ නැත! (Edge PC එක එය ඩවුන්ලෝඩ් කරගනී)
         registration_session = {'company_id': None, 'emp_id': '', 'name': '', 'outlet': '', 'embeddings': []}
         return jsonify({"success": True})
 
@@ -407,6 +438,10 @@ def log_event():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/video_frame', methods=['POST'])
+@app.route('/api/engine_settings', methods=['GET'])
+def dummy_engine_settings():
+    # පරණ Dashboard එකෙන් එන Request වලට Dummy උත්තරයක් දීම
+    return jsonify({"is_active": True, "camera_source": "0"})
 def api_video_frame():
     try:
         api_key = request.headers.get('X-API-Key')
@@ -415,7 +450,6 @@ def api_video_frame():
             data = request.data
             if data:
                 b64 = base64.b64encode(data).decode('utf-8')
-                # යවන සමාගමේ Dashboard එකට පමණක් වීඩියෝව පෙන්වයි
                 socketio.emit('video_stream', {'frame': b64}, room=f"company_{company[0]}")
         return '', 204
     except Exception as e:
@@ -467,9 +501,10 @@ def handle_connect():
             'clocked_in_staff': get_clocked_in_staff(company_id)
         }, to=room_name)
 
+
 @socketio.on('request_attendance')
-def handle_attendance_request(data):
-    company_id = data.get('company_id') if data else None
+def handle_attendance_request(data=None):  # [FIXED] data=None කිරීමෙන් හිස් දත්ත ආවත් Crash නොවේ
+    company_id = data.get('company_id') if isinstance(data, dict) else None
     if company_id:
         room_name = f"company_{company_id}"
         emit('attendance_update', {

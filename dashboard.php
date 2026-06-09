@@ -1,5 +1,12 @@
 <?php
 include 'connectin.php';
+session_start();
+if (!isset($_SESSION['company_id'])) {
+    header("Location: login.php");
+    exit();
+}
+$current_company_id = $_SESSION['company_id'];
+$current_company_name = $_SESSION['company_name'];
 
 // ── 1. EMPLOYEE DELETE HANDLER ────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_emp_id'])) {
@@ -219,7 +226,7 @@ $FLASK_URL = "http://localhost:5000";
                     <span><i class="bi bi-people-fill"></i> All Registered Employees</span>
                     <span style="font-size:14px;font-weight:400;">
                         <?php
-                        $res_emps = $conn->query("SELECT COUNT(*) AS cnt FROM employees");
+                        $res_emps = $conn->query("SELECT COUNT(*) AS cnt FROM employees WHERE company_id = $current_company_id");
                         $total_emps = $res_emps ? $res_emps->fetch_assoc()['cnt'] : 0;
                         echo $total_emps . ' Employees';
                         ?>
@@ -230,7 +237,8 @@ $FLASK_URL = "http://localhost:5000";
                         <thead><tr><th>Employee ID</th><th>Name</th><th>Outlet</th><th>Registered Date</th><th>Action</th></tr></thead>
                         <tbody>
                             <?php
-                            $emp_sql = "SELECT emp_id, name, outlet, created_at FROM employees ORDER BY created_at DESC";
+                            // පෙන්වන්නේ අදාල සමාගමේ සේවකයින් පමණයි
+                            $emp_sql = "SELECT emp_id, name, outlet, created_at FROM employees WHERE company_id = $current_company_id ORDER BY created_at DESC";
                             $emp_result = $conn->query($emp_sql);
                             if ($emp_result && $emp_result->num_rows > 0) {
                                 while ($row = $emp_result->fetch_assoc()) {
@@ -315,57 +323,35 @@ $FLASK_URL = "http://localhost:5000";
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <script>
-    // මාසික Attendance වාර්තාව බාගත කිරීමේ Function එක
-    function downloadMonthlyCSV() {
-        showToast('Preparing Monthly Report...', 'info');
-        
-        fetch(`${FLASK}/api/attendance/monthly`)
-            .then(r => r.json())
-            .then(res => {
-                if (res.success && res.data.length > 0) {
-                    let csv = 'Record ID,Employee ID,Name,Date,Clock In,Clock Out,Duration (Mins),Outlet,Status\n';
-                    
-                    res.data.forEach(r => {
-                        const id = r.id;
-                        const emp_id = r.emp_id || '—';
-                        const name = `"${r.name}"`; // නම් වල කොමා තිබුණහොත් ගැටළුවක් නොවීමට
-                        const date = r.date;
-                        const cIn = r.clock_in_time || '—';
-                        const cOut = r.clock_out_time || '—';
-                        const dur = r.duration_mins || '0';
-                        const outlet = r.outlet || '—';
-                        const status = r.status === 'clocked_in' ? 'Clocked In' : 'Completed';
-                        
-                        csv += `${id},${emp_id},${name},${date},${cIn},${cOut},${dur},${outlet},${status}\n`;
-                    });
-                    
-                    // CSV ගොනුව නිර්මාණය කර Download කිරීම
-                    const currentMonth = new Date().toISOString().slice(0,7); // 2026-06 ආදී වශයෙන් ලබාගනී
-                    const a = document.createElement('a');
-                    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-                    a.download = `Monthly_Attendance_${currentMonth}.csv`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    
-                    showToast('Monthly report downloaded successfully!', 'success');
-                } else if (res.success && res.data.length === 0) {
-                    showToast('No records found for this month.', 'warning');
-                } else {
-                    showToast(res.error || 'Failed to fetch data', 'error');
-                }
-            })
-            .catch(e => showToast('Connection Error: ' + e, 'error'));
-    }
     const FLASK = 'http://localhost:5000';
-    const socket = io(FLASK, { transports: ['websocket'], reconnection: true });
+    
+    // ── MULTI-TENANT SOCKET.IO CONNECTION ──
+    const CURRENT_COMPANY_ID = "<?php echo isset($_SESSION['company_id']) ? $_SESSION['company_id'] : ''; ?>";
+
+    const socket = io(FLASK, {
+        query: { company_id: CURRENT_COMPANY_ID }
+    });
+
+    // තත්පර 5කට වරක් Auto-Refresh වීම
+    setInterval(() => {
+        if (CURRENT_COMPANY_ID) {
+            socket.emit('request_attendance', { company_id: CURRENT_COMPANY_ID });
+        }
+    }, 5000);
+    // ───────────────────────────────────────
 
     let timeWindowModal;
     document.addEventListener("DOMContentLoaded", function() {
         timeWindowModal = new bootstrap.Modal(document.getElementById('timeWindowModal'));
     });
 
-    socket.on('connect', () => { updateConnectionStatus('Connected', true); socket.emit('request_attendance'); });
+    socket.on('connect', () => { 
+        updateConnectionStatus('Connected', true); 
+        if (CURRENT_COMPANY_ID) {
+            socket.emit('request_attendance', { company_id: CURRENT_COMPANY_ID }); 
+        }
+    });
+    
     socket.on('disconnect', () => updateConnectionStatus('Disconnected', false));
     
     socket.on('video_stream', (data) => {
@@ -387,11 +373,54 @@ $FLASK_URL = "http://localhost:5000";
         renderAttendanceTable(data.data || []);
     });
 
-    // Check out confirmed event
     socket.on('clock_out_confirmed', (data) => {
         showToast(`✓ ${data.name} clocked out successfully`, 'success');
-        socket.emit('request_attendance');
+        if (CURRENT_COMPANY_ID) {
+            socket.emit('request_attendance', { company_id: CURRENT_COMPANY_ID });
+        }
     });
+
+    function downloadMonthlyCSV() {
+        showToast('Preparing Monthly Report...', 'info');
+        
+        // PHP හරහා Company ID එක යැවීම
+        fetch(`${FLASK}/api/attendance/monthly?company_id=${CURRENT_COMPANY_ID}`)
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.data.length > 0) {
+                    let csv = 'Record ID,Employee ID,Name,Date,Clock In,Clock Out,Duration (Mins),Outlet,Status\n';
+                    
+                    res.data.forEach(r => {
+                        const id = r.id;
+                        const emp_id = r.emp_id || '—';
+                        const name = `"${r.name}"`;
+                        const date = r.date;
+                        const cIn = r.clock_in_time || '—';
+                        const cOut = r.clock_out_time || '—';
+                        const dur = r.duration_mins || '0';
+                        const outlet = r.outlet || '—';
+                        const status = r.status === 'clocked_in' ? 'Clocked In' : 'Completed';
+                        
+                        csv += `${id},${emp_id},${name},${date},${cIn},${cOut},${dur},${outlet},${status}\n`;
+                    });
+                    
+                    const currentMonth = new Date().toISOString().slice(0,7);
+                    const a = document.createElement('a');
+                    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+                    a.download = `Monthly_Attendance_${currentMonth}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    showToast('Monthly report downloaded successfully!', 'success');
+                } else if (res.success && res.data.length === 0) {
+                    showToast('No records found for this month.', 'warning');
+                } else {
+                    showToast(res.error || 'Failed to fetch data', 'error');
+                }
+            })
+            .catch(e => showToast('Connection Error: ' + e, 'error'));
+    }
 
    function renderStaffList(staff) {
         const list = document.getElementById('staff-list');
@@ -403,8 +432,6 @@ $FLASK_URL = "http://localhost:5000";
         list.innerHTML = staff.map(s => {
             const pct = Math.round((s.clock_in_conf || 0) * 100);
             const low = (s.clock_in_conf || 0) < 0.8 ? 'low' : '';
-            
-            // [FIXED] ID එක අනිවාර්යයෙන්ම ලබාගන්නා බව සහතික කිරීම
             const empId = s.employee_id || s.emp_id || s.id || '';
             
             return `
@@ -424,7 +451,6 @@ $FLASK_URL = "http://localhost:5000";
         count.textContent = `${staff.length} staff`;
     }
 
-    // [FIXED] Button parameter එක අලුතින් එකතු කර ඇත
     function manualClockOut(empId, empName, btnElement) {
         if (!empId) {
             showToast('Error: Employee ID is missing!', 'error');
@@ -435,7 +461,6 @@ $FLASK_URL = "http://localhost:5000";
             return;
         }
 
-        // Button එක එබූ ගමන් Double Click වීම වළක්වන්න එය Disable කරයි
         if (btnElement) {
             btnElement.disabled = true;
             btnElement.innerHTML = `<i class="bi bi-hourglass-split"></i> Processing...`;
@@ -445,6 +470,7 @@ $FLASK_URL = "http://localhost:5000";
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                api_key: "<?php echo isset($_SESSION['api_key']) ? $_SESSION['api_key'] : ''; ?>", // [ADDED] API Key
                 employee_id: empId,
                 name: empName,
                 event_type: 'clock_out'
@@ -453,10 +479,11 @@ $FLASK_URL = "http://localhost:5000";
         .then(r => r.json())
         .then(data => {
             if(data.success || data.event === 'clock_out_confirmed') {
-                socket.emit('request_attendance');
+                if (CURRENT_COMPANY_ID) {
+                    socket.emit('request_attendance', { company_id: CURRENT_COMPANY_ID });
+                }
             } else {
                 showToast(data.error || 'Clock out failed', 'error');
-                // වැරදීමක් වුනොත් ආපහු Button එක Enable කරයි
                 if (btnElement) {
                     btnElement.disabled = false;
                     btnElement.innerHTML = `<i class="bi bi-box-arrow-right"></i> Check Out`;
@@ -469,34 +496,6 @@ $FLASK_URL = "http://localhost:5000";
                 btnElement.disabled = false;
                 btnElement.innerHTML = `<i class="bi bi-box-arrow-right"></i> Check Out`;
             }
-        });
-    }
-    // Manual Check Out Function
-    function manualClockOut(empId, empName) {
-        if (!confirm(`Are you sure you want to clock out ${empName}?`)) {
-            return;
-        }
-
-        fetch(`${FLASK}/api/event`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                employee_id: empId,
-                name: empName,
-                event_type: 'clock_out'
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if(data.success || data.event === 'clock_out_confirmed') {
-                socket.emit('request_attendance');
-                showToast(`Check out request sent for ${empName}`, 'info');
-            } else {
-                showToast(data.error || 'Clock out failed', 'error');
-            }
-        })
-        .catch(e => {
-            showToast('Connection error: ' + e, 'error');
         });
     }
 
@@ -617,4 +616,3 @@ $FLASK_URL = "http://localhost:5000";
 </script>
 </body>
 </html>
-<?php $conn->close(); ?>

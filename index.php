@@ -355,14 +355,16 @@ main{
 #idleScreen p{font-family:var(--mono);font-size:11px;color:var(--text-sec);}
 
 /* Face detection canvas */
-#overlayCanvas{
+ #overlayCanvas{
   position:absolute;
   inset:0;
   width:100%;
   height:100%;
   object-fit:cover;
   pointer-events:none;
+  transform:scaleX(-1); /* මේ පේළිය අනිවාර්යයෙන් දාන්න */
 }
+
 
 /* Pose instruction bottom bar */
 .cam-bottom{
@@ -660,16 +662,20 @@ async function pollFaceDetection() {
   const vid = document.getElementById('videoEl');
   if (!vid.videoWidth || !vid.videoHeight) return;
 
+  // Aspect ratio එක හරියටම තියාගන්න
+  const targetWidth = 400; // Resolution එක ටිකක් වැඩි කළා පැහැදිලි වෙන්න
+  const targetHeight = Math.round((vid.videoHeight / vid.videoWidth) * targetWidth);
+
   const canvas = document.createElement('canvas');
-  canvas.width = 300; 
-  canvas.height = 300;
+  canvas.width = targetWidth; 
+  canvas.height = targetHeight;
   const ctx = canvas.getContext('2d');
   
-  ctx.translate(canvas.width, 0);
-  ctx.scale(-1, 1);
+  // කලින් තිබ්බ flip කරන කොටස (translate, scale) අයින් කළා
   ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
 
-  const imageData = canvas.toDataURL('image/jpeg', 0.4); 
+  // Quality එක 0.8 ට වැඩි කළා (Haar Cascade එකට හොඳට අඳුරගන්න)
+  const imageData = canvas.toDataURL('image/jpeg', 0.8); 
 
   try {
     const res = await fetch(`${API}/live_detect`, {
@@ -682,8 +688,8 @@ async function pollFaceDetection() {
     
     const data = await res.json();
     if (data && data.face_boxes !== undefined) {
-      const scaleX = vid.videoWidth / 300;
-      const scaleY = vid.videoHeight / 300;
+      const scaleX = vid.videoWidth / targetWidth;
+      const scaleY = vid.videoHeight / targetHeight;
       
       faceBoxes = data.face_boxes.map(b => ({
           x: b.x * scaleX,
@@ -694,9 +700,10 @@ async function pollFaceDetection() {
       }));
     }
   } catch (e) {
-    // Ignore networking errors silently
+    console.error("Live detection error: ", e);
   }
 }
+    // Ignore networking errors silently
 
 /* ── Draw face-detection overlay ── */
 function drawFaceBoxes() {

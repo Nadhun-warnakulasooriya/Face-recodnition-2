@@ -19,6 +19,8 @@ from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  ADD THESE TWO LINES TO FIX THE NAMEERROR
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -243,33 +245,6 @@ def capture_pose():
         return jsonify({"success": False, "message": "Face not detected. Adjust lighting."})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
-def capture_pose():
-    global registration_session
-    try:
-        data = request.get_json()
-        img_b64 = data.get('image', '').split(',')[1]
-        img_data = base64.b64decode(img_b64)
-        nparr = np.frombuffer(img_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = DeepFace.represent(img_path=rgb_img, model_name="Facenet512", detector_backend="retinaface", enforce_detection=True)
-
-        if len(results) == 1:
-            emb = results[0]["embedding"]
-            registration_session['embeddings'].append(emb)
-            area = results[0].get('facial_area', {})
-            box = [{"x": area.get('x'), "y": area.get('y'), "w": area.get('w'), "h": area.get('h'), "conf": "100%"}] if area else []
-            return jsonify({"success": True, "face_boxes": box})
-        elif len(results) > 1:
-            return jsonify({"success": False, "message": "Multiple faces detected! Please stand alone."})
-        else:
-            return jsonify({"success": False, "message": "No face detected."})
-
-    except ValueError:
-        return jsonify({"success": False, "message": "Face not detected. Adjust lighting."})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
 
 @app.route('/save', methods=['POST'])
 def save_registration():
@@ -437,12 +412,24 @@ def log_event():
         logger.error(f"/api/event error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/video_frame', methods=['POST'])
 @app.route('/api/engine_settings', methods=['GET'])
 def dummy_engine_settings():
     # පරණ Dashboard එකෙන් එන Request වලට Dummy උත්තරයක් දීම
     return jsonify({"is_active": True, "camera_source": "0"})
+
+@app.route('/api/video_frame', methods=['POST'])
 def api_video_frame():
+    try:
+        api_key = request.headers.get('X-API-Key')
+        company = get_company_by_api_key(api_key)
+        if company:
+            data = request.data
+            if data:
+                b64 = base64.b64encode(data).decode('utf-8')
+                socketio.emit('video_stream', {'frame': b64}, room=f"company_{company[0]}")
+        return '', 204
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     try:
         api_key = request.headers.get('X-API-Key')
         company = get_company_by_api_key(api_key)

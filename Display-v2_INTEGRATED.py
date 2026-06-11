@@ -8,28 +8,7 @@ import queue
 import time
 import urllib.request
 from collections import deque
-
-
-# ── SaaS Sync (Company Specific) ──────────────────────────────────────────────
-API_KEY = "KEY_KEELLS_7712" # මේක ඔයාගේ සමාගම අනුව වෙනස් වෙනවා
-SYNC_URL = "http://72.61.246.233:5000/api/sync_faces"
-
-def sync_database():
-    print("[SYNC] Downloading latest employee data from server...")
-    try:
-        response = requests.post(SYNC_URL, json={"api_key": API_KEY})
-        if response.status_code == 200:
-            data = response.json().get("database", {})
-            with open("deepface_database.pkl", "wb") as f:
-                pickle.dump(data, f)
-            print(f"[OK] Sync successful. Loaded {len(data)} employees.")
-        else:
-            print(f"[ERROR] Sync failed: {response.text}")
-    except Exception as e:
-        print(f"[ERROR] Connection to server failed: {e}")
-
-# කැමරාව ඔන් වෙන්න කලින් මේක Run කරන්න
-sync_database()
+from event_logger import AttendanceEventLogger
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  CONFIG  — tuned for i5 12th-gen CPU-only
@@ -56,6 +35,12 @@ NUM_WORKERS       = 2      # NEW: two recognition threads = use both P-cores
 cv2.setNumThreads(0)        # 0 = auto (uses all logical cores)
 os.environ["OMP_NUM_THREADS"]      = "8"   # adjust to your core count
 os.environ["OPENBLAS_NUM_THREADS"] = "8"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ATTENDANCE EVENT LOGGER INITIALIZATION
+# ═══════════════════════════════════════════════════════════════════════════════
+event_logger = AttendanceEventLogger(backend_url="http://localhost:5000")
+print("[OK] Event logger initialized - sending events to http://localhost:5000")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DOWNLOAD YUNET MODEL
@@ -200,6 +185,18 @@ def recognition_worker():
                 "history": history,
                 "last_frame": result_store.get(face_key, {}).get("last_frame", 0),
             }
+
+            # ── NEW: LOG ATTENDANCE EVENT ──────────────────────────────────────
+            # Send to attendance backend if person is recognized
+            if name != "Unknown Person":
+                event_logger.log_event(
+                    employee_id=face_key,
+                    name=name,
+                    dept=dept,
+                    confidence=smooth_conf,
+                    frame_bgr=roi_bgr,
+                    event_type='auto'  # auto-detects clock-in vs clock-out
+                )
 
         recog_queue.task_done()
 

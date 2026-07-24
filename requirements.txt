@@ -1,0 +1,11 @@
+requests
+opencv-python<5.0
+numpy
+Pillow
+customtkinter
+deepface
+tf-keras
+mysql-connector-python
+flask
+flask-socketio
+flask-cors

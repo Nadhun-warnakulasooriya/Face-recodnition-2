@@ -1,0 +1,148 @@
+[2026-07-14 21:31:45,096] CRITICAL: Cannot connect to MySQL: 2003 (HY000): Can't connect to MySQL server on '127.0.0.1:3306' (10061)
+[2026-07-24 19:42:53,545] CRITICAL: Cannot connect to MySQL: 1045 (28000): Access denied for user 'admin'@'localhost' (using password: YES)
+[2026-07-24 20:09:50,899] INFO: MySQL connection pool ready.
+[2026-07-24 20:12:15,268] INFO: MySQL connection pool ready.
+[2026-07-24 20:12:15,445] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 20:12:20,530] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 20:12:20,543] INFO: ================================================================================
+[2026-07-24 20:12:20,555] INFO: SaaS Face Recognition API Started
+[2026-07-24 20:12:20,555] INFO: ================================================================================
+[2026-07-24 20:12:20,587] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 20:12:20,588] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 20:12:49,928] INFO: 127.0.0.1 - - [24/Jul/2026 20:12:49] "POST /api/sync_faces HTTP/1.1" 200 -
+[2026-07-24 20:13:26,178] INFO: [Keells Super] Clock-in: Nadhun (Admin)
+[2026-07-24 20:13:26,181] INFO: 127.0.0.1 - - [24/Jul/2026 20:13:26] "[35m[1mPOST /api/event HTTP/1.1[0m" 201 -
+[2026-07-24 20:13:40,315] INFO: 127.0.0.1 - - [24/Jul/2026 20:13:40] "[33mGET / HTTP/1.1[0m" 404 -
+[2026-07-24 20:13:40,373] INFO: 127.0.0.1 - - [24/Jul/2026 20:13:40] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+[2026-07-24 20:13:58,382] INFO: 127.0.0.1 - - [24/Jul/2026 20:13:58] "[33mGET / HTTP/1.1[0m" 404 -
+[2026-07-24 20:13:58,416] INFO: 127.0.0.1 - - [24/Jul/2026 20:13:58] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+[2026-07-24 22:37:52,785] INFO: MySQL connection pool ready.
+[2026-07-24 22:37:53,042] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 22:38:02,496] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 22:38:02,503] INFO: ================================================================================
+[2026-07-24 22:38:02,503] INFO: SaaS Face Recognition API Started
+[2026-07-24 22:38:02,504] INFO: ================================================================================
+[2026-07-24 22:38:02,505] INFO: Running Auto Check-out task...
+[2026-07-24 22:38:02,521] INFO: Auto Check-out task completed.
+[2026-07-24 22:38:02,525] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 22:38:02,525] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 22:45:14,039] INFO: MySQL connection pool ready.
+[2026-07-24 22:45:14,131] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 22:45:18,452] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 22:45:18,461] INFO: ================================================================================
+[2026-07-24 22:45:18,461] INFO: SaaS Face Recognition API Started
+[2026-07-24 22:45:18,461] INFO: ================================================================================
+[2026-07-24 22:45:18,462] INFO: Running Auto Check-out task...
+[2026-07-24 22:45:18,464] INFO: Auto Check-out task completed.
+[2026-07-24 22:45:18,482] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 22:45:18,482] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 22:49:05,977] INFO: MySQL connection pool ready.
+[2026-07-24 22:49:06,067] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 22:49:10,658] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 22:49:10,666] INFO: ================================================================================
+[2026-07-24 22:49:10,666] INFO: SaaS Face Recognition API Started
+[2026-07-24 22:49:10,666] INFO: ================================================================================
+[2026-07-24 22:49:10,667] INFO: Running Auto Check-out task...
+[2026-07-24 22:49:10,669] INFO: Auto Check-out task completed.
+[2026-07-24 22:49:10,690] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 22:49:10,691] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 23:00:45,959] INFO: MySQL connection pool ready.
+[2026-07-24 23:00:46,042] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 23:00:50,433] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 23:00:50,443] INFO: ================================================================================
+[2026-07-24 23:00:50,444] INFO: SaaS Face Recognition API Started
+[2026-07-24 23:00:50,444] INFO: ================================================================================
+[2026-07-24 23:00:50,445] INFO: Running Auto Check-out task...
+[2026-07-24 23:00:50,454] INFO: Auto Check-out task completed.
+[2026-07-24 23:00:50,474] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 23:00:50,475] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 23:01:09,079] INFO: 127.0.0.1 - - [24/Jul/2026 23:01:09] "[33mGET /health HTTP/1.1[0m" 404 -
+[2026-07-24 23:06:07,153] INFO: MySQL connection pool ready.
+[2026-07-24 23:06:07,242] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 23:06:11,579] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 23:06:11,586] INFO: ================================================================================
+[2026-07-24 23:06:11,586] INFO: SaaS Face Recognition API Started
+[2026-07-24 23:06:11,587] INFO: ================================================================================
+[2026-07-24 23:06:11,588] INFO: Running Auto Check-out task...
+[2026-07-24 23:06:11,590] INFO: Auto Check-out task completed.
+[2026-07-24 23:06:11,611] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 23:06:11,612] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 23:08:05,435] INFO: MySQL connection pool ready.
+[2026-07-24 23:08:05,524] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 23:08:09,891] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 23:08:09,898] INFO: ================================================================================
+[2026-07-24 23:08:09,898] INFO: SaaS Face Recognition API Started
+[2026-07-24 23:08:09,899] INFO: Running Auto Check-out task...
+[2026-07-24 23:08:09,899] INFO: ================================================================================
+[2026-07-24 23:08:09,902] INFO: Auto Check-out task completed.
+[2026-07-24 23:08:09,920] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 23:08:09,921] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 23:15:16,940] INFO: 127.0.0.1 - - [24/Jul/2026 23:15:16] "POST /api/sync_faces HTTP/1.1" 200 -
+[2026-07-24 23:45:01,751] INFO: MySQL connection pool ready.
+[2026-07-24 23:45:01,873] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-24 23:45:07,585] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-24 23:45:07,594] INFO: ================================================================================
+[2026-07-24 23:45:07,594] INFO: SaaS Face Recognition API Started
+[2026-07-24 23:45:07,596] INFO: ================================================================================
+[2026-07-24 23:45:07,621] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-24 23:45:07,622] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-24 23:45:49,126] INFO: 127.0.0.1 - - [24/Jul/2026 23:45:49] "POST /api/sync_faces HTTP/1.1" 200 -
+[2026-07-25 00:07:12,635] INFO: MySQL connection pool ready.
+[2026-07-25 00:07:12,764] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-25 00:07:18,392] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-25 00:07:18,400] INFO: ================================================================================
+[2026-07-25 00:07:18,401] INFO: SaaS Face Recognition API Started
+[2026-07-25 00:07:18,401] INFO: ================================================================================
+[2026-07-25 00:07:18,432] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://172.24.142.227:5000
+[2026-07-25 00:07:18,433] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-25 00:16:28,234] INFO: MySQL connection pool ready.
+[2026-07-25 00:16:28,328] INFO: Pre-warming DeepFace Facenet512 Model. Please wait...
+[2026-07-25 00:16:32,773] INFO: DeepFace Model loaded to RAM successfully!
+[2026-07-25 00:16:32,784] INFO: ================================================================================
+[2026-07-25 00:16:32,785] INFO: SaaS Face Recognition API Started
+[2026-07-25 00:16:32,785] INFO: ================================================================================
+[2026-07-25 00:16:32,812] INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.11.30.251:5000
+[2026-07-25 00:16:32,812] INFO: [33mPress CTRL+C to quit[0m
+[2026-07-25 00:16:44,342] INFO: 10.11.30.251 - - [25/Jul/2026 00:16:44] "[33mGET / HTTP/1.1[0m" 404 -
+[2026-07-25 00:16:44,379] INFO: 10.11.30.251 - - [25/Jul/2026 00:16:44] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+[2026-07-25 00:17:22,447] INFO: 127.0.0.1 - - [25/Jul/2026 00:17:22] "[33mGET / HTTP/1.1[0m" 404 -
+[2026-07-25 00:17:22,481] INFO: 127.0.0.1 - - [25/Jul/2026 00:17:22] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+[2026-07-25 00:18:20,183] INFO: 10.11.30.251 - - [25/Jul/2026 00:18:20] "GET /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTFsz HTTP/1.1" 200 -
+[2026-07-25 00:18:20,212] INFO: Dashboard connected to Room: company_1
+[2026-07-25 00:18:20,245] INFO: 10.11.30.251 - - [25/Jul/2026 00:18:20] "POST /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTFtR&sid=kkQQBSJdPlG4yVSfAAAA HTTP/1.1" 200 -
+[2026-07-25 00:18:20,246] INFO: 10.11.30.251 - - [25/Jul/2026 00:18:20] "GET /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTFtT&sid=kkQQBSJdPlG4yVSfAAAA HTTP/1.1" 200 -
+[2026-07-25 00:19:38,211] INFO: 10.11.30.251 - - [25/Jul/2026 00:19:38] "GET /socket.io/?company_id=1&EIO=4&transport=websocket&sid=kkQQBSJdPlG4yVSfAAAA HTTP/1.1" 200 -
+[2026-07-25 00:19:38,308] INFO: 10.11.30.251 - - [25/Jul/2026 00:19:38] "GET /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTYwj HTTP/1.1" 200 -
+[2026-07-25 00:19:38,364] INFO: Dashboard connected to Room: company_1
+[2026-07-25 00:19:38,386] INFO: 10.11.30.251 - - [25/Jul/2026 00:19:38] "POST /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTYy9&sid=6OzEBYCqbXTtbX-TAAAC HTTP/1.1" 200 -
+[2026-07-25 00:19:38,387] INFO: 10.11.30.251 - - [25/Jul/2026 00:19:38] "GET /socket.io/?company_id=1&EIO=4&transport=polling&t=P-LTYyA&sid=6OzEBYCqbXTtbX-TAAAC HTTP/1.1" 200 -
